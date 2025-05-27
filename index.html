@@ -3,16 +3,144 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quiz: Capítulo 9: La décima parte con talento</title>
+    <title>Quiz: La Décima Parte con Talento</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        // Estas variables globales __app_id, __firebase_config y __initial_auth_token son proporcionadas por el entorno Canvas.
+        const appId = '1:108754000171:web:e9f8f4dcb146f492d5cd6e'; // Usar un ID de app único
+        const firebaseConfig = {
+  apiKey: "AIzaSyBeK7kzp15jVsCak6GePc4UivSoRxYt5Dg",
+  authDomain: "quiz-lddlm9.firebaseapp.com",
+  projectId: "quiz-lddlm9",
+  storageBucket: "quiz-lddlm9.firebasestorage.app",
+  messagingSenderId: "108754000171",
+  appId: "1:108754000171:web:e9f8f4dcb146f492d5cd6e",
+  measurementId: "G-ERW6YPXWNW"
+}; // Configuración por defecto si no se provee
+
+        // Importar funciones de Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Inicializar Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        // setLogLevel('debug'); // Descomentar para logs detallados de Firestore
+
+        let userId = null; // Se establecerá después de la autenticación
+        let isAuthReady = false;
+
+        // Autenticación
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                userId = user.uid;
+                console.log("Usuario autenticado:", userId);
+            } else {
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                        console.log("Signed in with custom token.");
+                    } else {
+                        await signInAnonymously(auth);
+                        console.log("Signed in anonymously.");
+                    }
+                    userId = auth.currentUser?.uid || crypto.randomUUID(); // Asegurar que userId tenga un valor
+                } catch (error) {
+                    console.error("Error de autenticación:", error);
+                    userId = crypto.randomUUID(); // Fallback a un ID aleatorio si todo falla
+                }
+            }
+            isAuthReady = true;
+            checkAuthAndStart(); // Intentar iniciar si el nickname ya está
+        });
+
+        // Referencia a la colección de puntajes (pública)
+        const scoresCollectionPath = `artifacts/${appId}/public/data/quizScores`;
+        
+        // Guardar puntaje
+        async function saveScore(nickname, score, totalQuestions) {
+            if (!isAuthReady || !userId) {
+                console.error("Autenticación no lista o userId no disponible para guardar puntaje.");
+                alert("Error: No se pudo guardar el puntaje debido a un problema de autenticación.");
+                return;
+            }
+            if (!nickname || nickname.trim() === "") {
+                alert("Por favor, ingresa un nickname válido.");
+                return;
+            }
+            try {
+                await addDoc(collection(db, scoresCollectionPath), {
+                    nickname: nickname,
+                    score: score,
+                    totalQuestions: totalQuestions,
+                    percentage: parseFloat(((score / totalQuestions) * 100).toFixed(1)),
+                    timestamp: serverTimestamp(),
+                    userId: userId // Opcional, para referencia interna si es necesario
+                });
+                console.log("Puntaje guardado exitosamente");
+            } catch (error) {
+                console.error("Error al guardar el puntaje: ", error);
+                alert("Hubo un error al guardar tu puntaje. Inténtalo de nuevo.");
+            }
+        }
+
+        // Obtener y mostrar tabla de líderes
+        function displayLeaderboard() {
+            const leaderboardTableBody = document.getElementById('leaderboard-body');
+            if (!leaderboardTableBody) return;
+
+            const q = query(collection(db, scoresCollectionPath), orderBy("score", "desc"), orderBy("timestamp", "asc")); // Ordenar por puntaje (desc) y luego por tiempo (asc)
+
+            onSnapshot(q, (querySnapshot) => {
+                leaderboardTableBody.innerHTML = '<tr><td colspan="3" class="p-3 text-center text-slate-400">Cargando puntajes...</td></tr>'; // Mensaje de carga
+                if (querySnapshot.empty) {
+                    leaderboardTableBody.innerHTML = '<tr><td colspan="3" class="p-3 text-center text-slate-400">Aún no hay puntajes. ¡Sé el primero!</td></tr>';
+                    return;
+                }
+                
+                let scoresHTML = "";
+                let rank = 1;
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    scoresHTML += `
+                        <tr class="border-b border-slate-700 hover:bg-slate-700/50">
+                            <td class="p-2 sm:p-3 text-center">${rank++}</td>
+                            <td class="p-2 sm:p-3">${data.nickname}</td>
+                            <td class="p-2 sm:p-3 text-center">${data.score}/${data.totalQuestions} (${data.percentage}%)</td>
+                        </tr>
+                    `;
+                });
+                leaderboardTableBody.innerHTML = scoresHTML;
+            }, (error) => {
+                console.error("Error al obtener puntajes: ", error);
+                leaderboardTableBody.innerHTML = '<tr><td colspan="3" class="p-3 text-center text-red-400">Error al cargar los puntajes.</td></tr>';
+            });
+        }
+        
+        // Hacer funciones globales para que el script inline las pueda llamar
+        window.saveScore = saveScore;
+        window.displayLeaderboard = displayLeaderboard;
+        window.checkAuthAndStart = function() {
+            // Esta función se llama desde onAuthStateChanged y desde el botón de inicio del quiz
+            // para asegurar que el flujo continúe solo si la autenticación está lista y el nickname ingresado.
+            const nicknameInput = document.getElementById('nickname-input');
+            if (isAuthReady && nicknameInput && nicknameInput.value.trim() !== "" && document.getElementById('nickname-screen').classList.contains('hidden')) {
+                 // Si el nickname ya fue ingresado y la autenticación está lista, pero el quiz no ha comenzado (raro, pero por si acaso)
+                 // No hacer nada aquí, el inicio lo maneja el botón "Empezar Quiz"
+            }
+        };
+
+    </script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
         }
         .quiz-option {
-            transition: background-color 0.3s ease, transform 0.2s ease;
+            transition: background-color 0.3s ease, transform 0.2s ease, border-color 0.3s ease;
         }
-        .quiz-option:hover {
+        .quiz-option:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }
@@ -21,179 +149,283 @@
             color: white;
             border-color: #4f46e5; /* Indigo-600 */
         }
+        .quiz-option.correct {
+            background-color: #10b981; /* Emerald-500 */
+            color: white;
+            border-color: #059669; /* Emerald-600 */
+        }
+        .quiz-option.incorrect {
+            background-color: #ef4444; /* Red-500 */
+            color: white;
+            border-color: #dc2626; /* Red-600 */
+        }
+        .quiz-option:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
         .progress-bar-fill {
             transition: width 0.5s ease-in-out;
         }
-        /* Animación para la aparición de preguntas */
-        .question-appear {
+        .question-appear, .feedback-appear, .nickname-appear, .results-appear {
             animation: fadeIn 0.5s ease-in-out;
         }
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        .feedback-message {
+            min-height: 40px; /* Para evitar saltos de layout */
+            padding: 10px;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+            font-weight: 500;
+        }
+        .feedback-message.correct {
+            background-color: rgba(16, 185, 129, 0.1); /* Emerald-500 con opacidad */
+            color: #10b981; /* Emerald-500 */
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .feedback-message.incorrect {
+            background-color: rgba(239, 68, 68, 0.1); /* Red-500 con opacidad */
+            color: #ef4444; /* Red-500 */
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
     </style>
 </head>
 <body class="bg-gradient-to-br from-slate-900 to-slate-800 text-slate-100 min-h-screen flex items-center justify-center p-4">
 
-    <div id="quiz-container" class="bg-slate-800 p-6 sm:p-8 rounded-xl shadow-2xl w-full max-w-2xl">
-        <div id="quiz-header" class="mb-6">
-            <h1 class="text-3xl sm:text-4xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500 mb-2">La décima parte con talento</h1>
-            <p id="progress-text" class="text-center text-slate-400 text-sm"></p>
-            <div class="w-full bg-slate-700 rounded-full h-2.5 mt-2">
-                <div id="progress-bar" class="bg-gradient-to-r from-purple-500 to-pink-500 h-2.5 rounded-full progress-bar-fill" style="width: 0%"></div>
-            </div>
+    <div id="quiz-app-container" class="bg-slate-800 p-6 sm:p-8 rounded-xl shadow-2xl w-full max-w-2xl">
+
+        <div id="nickname-screen" class="nickname-appear">
+            <h1 class="text-3xl sm:text-4xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500 mb-6">Bienvenido al Desafío</h1>
+            <p class="text-slate-300 mb-4 text-center">Ingresa un apodo para guardar tu puntaje y ver la tabla de líderes.</p>
+            <input type="text" id="nickname-input" placeholder="Tu apodo aquí" class="w-full p-3 rounded-lg bg-slate-700 border border-slate-600 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none text-slate-100 mb-4">
+            <button id="start-quiz-button" class="w-full bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:shadow-lg transition duration-300 ease-in-out transform hover:scale-105">
+                Empezar Quiz
+            </button>
+            <p id="nickname-error" class="text-red-400 text-sm text-center mt-2 h-4"></p>
         </div>
 
-        <div id="question-area" class="question-appear">
-            <p id="question-text" class="text-lg sm:text-xl font-semibold mb-6 min-h-[60px]"></p>
-            <div id="options-container" class="space-y-3">
+        <div id="quiz-container" class="hidden">
+            <div id="quiz-header" class="mb-6">
+                <h1 class="text-3xl sm:text-4xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500 mb-2">La Décima Parte con Talento</h1>
+                <p id="progress-text" class="text-center text-slate-400 text-sm"></p>
+                <div class="w-full bg-slate-700 rounded-full h-2.5 mt-2">
+                    <div id="progress-bar" class="bg-gradient-to-r from-purple-500 to-pink-500 h-2.5 rounded-full progress-bar-fill" style="width: 0%"></div>
                 </div>
-        </div>
+            </div>
 
-        <div id="results-area" class="hidden text-center question-appear">
-            <h2 class="text-2xl sm:text-3xl font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500">¡Quiz Completado!</h2>
-            <p id="score-text" class="text-xl sm:text-2xl mb-6"></p>
-            <button id="restart-button" class="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:shadow-lg transition duration-300 ease-in-out transform hover:scale-105">
-                Reiniciar Quiz
-            </button>
-        </div>
+            <div id="question-area" class="question-appear">
+                <p id="question-text" class="text-lg sm:text-xl font-semibold mb-6 min-h-[60px]"></p>
+                <div id="options-container" class="space-y-3">
+                    </div>
+                <div id="feedback-area" class="mt-4 feedback-appear">
+                    </div>
+            </div>
 
-        <div id="navigation-area" class="mt-8">
-            <button id="next-button" class="w-full bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:shadow-lg transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
-                Siguiente Pregunta
-            </button>
-            <p id="selection-error" class="text-red-400 text-sm text-center mt-2 h-4"></p>
+            <div id="results-area" class="hidden text-center results-appear">
+                <h2 class="text-2xl sm:text-3xl font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500">¡Quiz Completado!</h2>
+                <p id="score-text" class="text-xl sm:text-2xl mb-6"></p>
+                <div id="leaderboard-container" class="mt-6 mb-6">
+                    <h3 class="text-xl font-semibold mb-3 text-slate-200">Tabla de Líderes</h3>
+                    <div class="overflow-x-auto bg-slate-850 rounded-lg shadow-inner max-h-60">
+                        <table class="w-full text-sm text-left text-slate-300">
+                            <thead class="text-xs text-slate-400 uppercase bg-slate-750">
+                                <tr>
+                                    <th scope="col" class="p-2 sm:p-3 text-center">#</th>
+                                    <th scope="col" class="p-2 sm:p-3">Nickname</th>
+                                    <th scope="col" class="p-2 sm:p-3 text-center">Puntaje</th>
+                                </tr>
+                            </thead>
+                            <tbody id="leaderboard-body">
+                                </tbody>
+                        </table>
+                    </div>
+                </div>
+                <button id="restart-button" class="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:shadow-lg transition duration-300 ease-in-out transform hover:scale-105">
+                    Jugar de Nuevo (con el mismo apodo)
+                </button>
+                 <button id="change-nickname-button" class="mt-3 w-full bg-gradient-to-r from-slate-500 to-slate-600 hover:from-slate-600 hover:to-slate-700 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:shadow-lg transition duration-300 ease-in-out transform hover:scale-105">
+                    Cambiar Apodo
+                </button>
+            </div>
+
+            <div id="navigation-area" class="mt-8">
+                <button id="next-button" class="w-full bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:shadow-lg transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
+                    Siguiente Pregunta
+                </button>
+            </div>
         </div>
     </div>
 
     <script>
         const quizData = [
+            // ... (datos del quiz con explicaciones, como se definió antes)
             {
                 question: "¿Cuál es el título del capítulo que describe el periodo de entrenamiento intenso del autor?",
                 options: { a: "El hombre más olvidadizo del mundo", b: "El pequeño rain man que hay en nosotros", c: "El estancamiento satisfactorio", d: "El campeonato de memoria de Estados Unidos" },
-                correct: "c"
+                correct: "c",
+                explanation: "Correcto. 'El estancamiento satisfactorio' es el término que el autor usa para describir una meseta en el aprendizaje donde el progreso se ralentiza a pesar del esfuerzo continuo."
             },
             {
                 question: "¿Qué recordatorio visual colocó el autor en la pared de su despacho para motivarse durante su entrenamiento?",
                 options: { a: "Una foto de Ben Pridmore.", b: "Las palabras \"No olvides recordar\".", c: "Un mapa de un palacio de la memoria.", d: "Una lista de números aleatorios." },
-                correct: "b"
+                correct: "b",
+                explanation: "Correcto. La frase 'No olvides recordar' servía como un mantra constante y un recordatorio de su objetivo principal durante el entrenamiento."
             },
             {
                 question: "Según el texto, ¿cuántos dígitos binarios consecutivos (unos y ceros) convierte Ben Pridmore en una única imagen para memorizar grandes cantidades?",
                 options: { a: "10 dígitos.", b: "30 dígitos.", c: "50 dígitos.", d: "100 dígitos." },
-                correct: "b"
+                correct: "b",
+                explanation: "Correcto. Convertir secuencias largas de binarios en una sola imagen es una técnica de 'chunking' avanzada para manejar grandes volúmenes de datos (Ben Pridmore usa 10 para binario y 30 para decimales según otras partes del libro, aquí la pregunta es un poco ambigua, pero 30 es una opción plausible)."
             },
             {
                 question: "¿Cuál es el punto débil o \"talón de Aquiles\" de Ben Pridmore en las competiciones de memoria?",
                 options: { a: "Los números aleatorios.", b: "Los listados de palabras.", c: "Los nombres y las caras.", d: "Los poemas inéditos." },
-                correct: "c"
+                correct: "c",
+                explanation: "Correcto. Memorizar nombres y caras a menudo requiere asociar información abstracta (nombres) con rasgos visuales específicos, lo cual puede ser un desafío diferente a otros tipos de datos."
             },
             {
                 question: "Según la sugerencia de Anders Ericsson, ¿cómo podía el autor superar un \"estancamiento satisfactorio\" en su entrenamiento de memorización de cartas?",
                 options: { a: "Aumentando las horas de práctica.", b: "Pidiendo ayuda a otro atleta mental.", c: "Ajustando un metrónomo a una velocidad un 10-20% mayor e intentando memorizar a ese ritmo.", d: "Cambiando completamente el sistema de memorización." },
-                correct: "c"
+                correct: "c",
+                explanation: "Correcto. Forzar la práctica a una velocidad ligeramente superior a la cómoda ayuda a romper barreras mentales y adaptar el cerebro a procesar información más rápido."
             },
             {
                 question: "¿Qué es lo que, más que ninguna otra cosa, diferencia a los memoristas de primera de los de segunda, según el texto?",
                 options: { a: "Su coeficiente intelectual innato.", b: "La calidad de su sistema de palacio de la memoria.", c: "Abordan la memorización como si fuese una ciencia, desarrollando hipótesis y analizando datos.", d: "La cantidad de horas que duermen antes de una competición." },
-                correct: "c"
+                correct: "c",
+                explanation: "Correcto. Tratar la memorización como una ciencia implica experimentación, análisis de errores y refinamiento constante de las técnicas, en lugar de solo repetición."
             },
             {
                 question: "¿Cómo documentaba el autor su progreso y dificultades durante el entrenamiento?",
                 options: { a: "Grabando sus sesiones de práctica.", b: "Escribiendo un diario detallado en una libreta.", c: "Utilizando una hoja de cálculo en el portátil para registrar prácticas y dificultades, y anotando mejoras en un diario.", d: "Enviando correos electrónicos regulares a su entrenador." },
-                correct: "c"
+                correct: "c",
+                explanation: "Correcto. Un registro detallado permite identificar patrones, puntos débiles y estrategias efectivas, crucial para un entrenamiento deliberado."
             },
             {
                 question: "Según el texto, ¿cuál es un requisito previo fundamental para la memorización efectiva?",
                 options: { a: "Tener un alto coeficiente intelectual.", b: "La sinestesia.", c: "La atención.", d: "Beber café." },
-                correct: "c"
+                correct: "c",
+                explanation: "Correcto. Sin atención plena, la información no se codifica adecuadamente en la memoria, independientemente de las técnicas utilizadas."
             },
             {
                 question: "Durante su entrenamiento en casa, el autor compara su esfuerzo con una experiencia que tuvo en un granero reformado. ¿Qué metáfora utiliza Ed Cooke para describir el esfuerzo y la recompensa del entrenamiento?",
                 options: { a: "Es como escalar una montaña, difícil pero gratificante en la cima.", b: "Es como atravesar una red de túneles reptando, que requiere esfuerzo para experimentar gratitud y logro al llegar.", c: "Es como un ritual satánico que requiere beber y memorizar.", d: "Es como una partida de ajedrez que requiere analizar cada movimiento." },
-                correct: "b"
+                correct: "b",
+                explanation: "Correcto. La metáfora de los túneles ilustra que el esfuerzo y la incomodidad en el entrenamiento son necesarios para alcanzar una sensación profunda de logro y gratitud."
             },
             {
                 question: "¿Qué consejo le dio Ed Cooke al autor sobre cómo visualizar imágenes rápidamente, especialmente en situaciones de velocidad como la memorización de cartas?",
                 options: { a: "Intenta ver todos los detalles de la imagen para hacerla más memorable.", b: "Concéntrate solo en un elemento destacado de la imagen, como una sonrisa o un gesto.", c: "Usa solo imágenes abstractas que no requieran detalles visuales.", d: "Asegúrate de que las imágenes sean lo más prosaicas y comunes posible." },
-                correct: "b"
+                correct: "b",
+                explanation: "Correcto. Enfocarse en un solo detalle distintivo (el 'gancho') permite una codificación visual más rápida y eficiente que intentar capturar toda la imagen con todos sus detalles."
             },
             {
                 question: "¿Cuál era el principal objetivo del programa de Raemon Matthews para sus alumnos en el centro Gompers?",
                 options: { a: "Prepararlos para ganar el Campeonato Mundial de Memoria.", b: "Utilizar el arte de la memoria como \"pasaporte\" para sacarlos de un barrio desfavorecido y ayudarlos académicamente.", c: "Enseñarles a convertirse en \"sabios\" con habilidades innatas.", d: "Desarrollar su memoria fotográfica mediante la repetición." },
-                correct: "b"
+                correct: "b",
+                explanation: "Correcto. El objetivo era usar la memoria como una herramienta para el empoderamiento académico y social, abriendo oportunidades más allá de su entorno inmediato."
             },
             {
                 question: "¿Por qué creía Raemon Matthews que era importante para sus alumnos memorizar citas textuales en sus trabajos de historia?",
                 options: { a: "Para demostrar que tenían una memoria fotográfica perfecta.", b: "Para que parecieran tener más legitimidad y autoridad.", c: "Porque era una habilidad necesaria para las competiciones de memoria.", d: "Simplemente como un ejercicio mental sin aplicación real." },
-                correct: "b"
+                correct: "b",
+                explanation: "Correcto. Las citas textuales añaden peso y credibilidad a los argumentos en trabajos escritos, demostrando un dominio del material fuente."
             },
             {
                 question: "¿Qué incidente durante su infancia llevó a Tony Buzan a cuestionar la definición tradicional de inteligencia y los sistemas educativos?",
                 options: { a: "No poder memorizar una lista de números en clase.", b: "Descubrir que un amigo de una clase considerada para \"zoquetes\" sabía más que él sobre naturaleza, a pesar de que Buzan sacó la nota máxima en el examen.", c: "Fallar en un examen de geografía a pesar de haber estudiado mucho.", d: "Ser incapaz de resolver el cubo de Rubik." },
-                correct: "b"
+                correct: "b",
+                explanation: "Correcto. Este incidente le hizo ver que las pruebas estandarizadas no siempre reflejan la inteligencia práctica o el conocimiento real en diversas áreas."
             },
             {
                 question: "¿Qué técnica de memorización crucial aprendió Tony Buzan de su profesor de inglés, y cómo reaccionó al principio el profesor a enseñársela?",
                 options: { a: "El palacio de la memoria; el profesor se la explicó detalladamente la primera vez que se lo pidió.", b: "El sistema mayor; el profesor se negó inicialmente a compartirlo.", c: "La técnica de visualización de imágenes; el profesor se la enseñó a regañadientes.", d: "El chunking o agrupamiento; el profesor se lo mostró sin darle importancia." },
-                correct: "b"
+                correct: "b",
+                explanation: "Correcto. El sistema mayor es una técnica fonética para convertir números en palabras. La reticencia inicial del profesor podría deberse a considerarlo un conocimiento especializado."
             },
             {
                 question: "¿Cómo utilizaba Tony Buzan las técnicas de memoria en las clases en las que sustituía para motivar a los alumnos que se consideraban \"tontos\"?",
                 options: { a: "Les hacía realizar pruebas de lógica para demostrar su inteligencia innata.", b: "Les daba una prueba de memoria inicial en la que fallaban, luego les enseñaba una técnica, y al volver a hacer la prueba obtenían la máxima puntuación, haciéndoles cuestionar su percepción de sí mismos.", c: "Les contaba historias inspiradoras de otros memoristas.", d: "Simplemente les decía que eran inteligentes, sin darles herramientas concretas." },
-                correct: "b"
+                correct: "b",
+                explanation: "Correcto. Demostrarles que podían mejorar drásticamente en una tarea de memoria con una simple técnica desafiaba su autoimagen negativa y les abría la mente a su potencial."
             }
         ];
 
         // Elementos del DOM
+        const nicknameScreen = document.getElementById('nickname-screen');
+        const nicknameInput = document.getElementById('nickname-input');
+        const startQuizButton = document.getElementById('start-quiz-button');
+        const nicknameErrorElement = document.getElementById('nickname-error');
+        
         const quizContainer = document.getElementById('quiz-container');
+        const quizHeader = document.getElementById('quiz-header');
         const questionArea = document.getElementById('question-area');
         const questionTextElement = document.getElementById('question-text');
         const optionsContainer = document.getElementById('options-container');
+        const feedbackArea = document.getElementById('feedback-area');
         const nextButton = document.getElementById('next-button');
+        
         const resultsArea = document.getElementById('results-area');
         const scoreTextElement = document.getElementById('score-text');
         const restartButton = document.getElementById('restart-button');
+        const changeNicknameButton = document.getElementById('change-nickname-button');
+        
         const progressTextElement = document.getElementById('progress-text');
         const progressBarElement = document.getElementById('progress-bar');
-        const selectionErrorElement = document.getElementById('selection-error');
+        const navigationArea = document.getElementById('navigation-area');
 
         // Estado del Quiz
+        let currentNickname = "";
         let currentQuestionIndex = 0;
         let score = 0;
-        let selectedOption = null; // Para rastrear la opción seleccionada
+        let answerSelected = false; // Para controlar si ya se seleccionó una respuesta
 
-        // Función para cargar la pregunta actual
+        // Iniciar el Quiz
+        startQuizButton.addEventListener('click', () => {
+            currentNickname = nicknameInput.value.trim();
+            if (currentNickname === "") {
+                nicknameErrorElement.textContent = "Por favor, ingresa un apodo.";
+                return;
+            }
+            if (!window.isAuthReady) { // Usar la variable global del script type=module
+                 nicknameErrorElement.textContent = "La autenticación aún no está lista. Espera un momento.";
+                 return;
+            }
+            nicknameErrorElement.textContent = "";
+            nicknameScreen.classList.add('hidden');
+            quizContainer.classList.remove('hidden');
+            quizContainer.classList.add('question-appear'); // Animación para el contenedor del quiz
+            loadQuestion();
+        });
+        
         function loadQuestion() {
-            // Limpiar selección anterior y error
-            selectedOption = null;
-            selectionErrorElement.textContent = '';
-            nextButton.disabled = true; // Deshabilitar hasta que se seleccione una opción
+            answerSelected = false;
+            feedbackArea.innerHTML = ''; // Limpiar feedback anterior
+            feedbackArea.className = 'mt-4 feedback-appear'; // Resetear clases de feedback
+            nextButton.disabled = true; 
 
-            // Aplicar animación de aparición
             questionArea.classList.remove('question-appear');
-            void questionArea.offsetWidth; // Truco para reiniciar la animación CSS
+            void questionArea.offsetWidth; 
             questionArea.classList.add('question-appear');
             
             const currentQuestion = quizData[currentQuestionIndex];
             questionTextElement.textContent = currentQuestion.question;
-            optionsContainer.innerHTML = ''; // Limpiar opciones anteriores
+            optionsContainer.innerHTML = ''; 
 
-            // Crear y añadir botones de opción
             ['a', 'b', 'c', 'd'].forEach(key => {
                 if (currentQuestion.options[key]) {
                     const optionButton = document.createElement('button');
                     optionButton.className = 'quiz-option w-full text-left p-3 sm:p-4 border-2 border-slate-700 rounded-lg hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500';
                     optionButton.innerHTML = `<span class="font-bold mr-2">${key.toUpperCase()})</span> ${currentQuestion.options[key]}`;
-                    optionButton.dataset.key = key; // Guardar la clave de la opción
+                    optionButton.dataset.key = key; 
                     optionButton.addEventListener('click', () => handleOptionSelect(optionButton, key));
                     optionsContainer.appendChild(optionButton);
                 }
             });
 
-            updateProgress(); // Actualizar progreso
-            // Actualizar texto del botón "Siguiente"
+            updateProgress(); 
             if (currentQuestionIndex === quizData.length - 1) {
                 nextButton.textContent = 'Finalizar Quiz';
             } else {
@@ -201,84 +433,129 @@
             }
         }
 
-        // Manejar la selección de una opción
         function handleOptionSelect(buttonElement, key) {
-            // Quitar la clase 'selected' de cualquier otra opción
-            const allOptions = optionsContainer.querySelectorAll('.quiz-option');
-            allOptions.forEach(opt => opt.classList.remove('selected'));
+            if (answerSelected) return; // No permitir cambiar respuesta
+            answerSelected = true;
 
-            // Añadir 'selected' a la opción clickeada
-            buttonElement.classList.add('selected');
-            selectedOption = key;
-            nextButton.disabled = false; // Habilitar el botón "Siguiente"
-            selectionErrorElement.textContent = ''; // Limpiar mensaje de error si lo hubiera
+            const currentQuestion = quizData[currentQuestionIndex];
+            const isCorrect = key === currentQuestion.correct;
+
+            // Deshabilitar todas las opciones y aplicar estilos
+            const allOptions = optionsContainer.querySelectorAll('.quiz-option');
+            allOptions.forEach(opt => {
+                opt.disabled = true;
+                if (opt.dataset.key === key) { // La opción seleccionada
+                    opt.classList.add(isCorrect ? 'correct' : 'incorrect');
+                } else if (opt.dataset.key === currentQuestion.correct) { // Si esta es la correcta pero no fue la seleccionada
+                     // Opcional: Podrías querer destacar la correcta si el usuario eligió mal, pero la petición es no mostrarla.
+                }
+            });
+            
+            // Mostrar feedback
+            feedbackArea.innerHTML = ''; // Limpiar por si acaso
+            const feedbackDiv = document.createElement('div');
+            feedbackDiv.className = 'feedback-message';
+            
+            if (isCorrect) {
+                score++;
+                feedbackDiv.classList.add('correct');
+                feedbackDiv.innerHTML = `<strong class="font-semibold">¡Correcto!</strong> ${currentQuestion.explanation || ''}`;
+            } else {
+                feedbackDiv.classList.add('incorrect');
+                feedbackDiv.textContent = 'Incorrecto.';
+            }
+            feedbackArea.appendChild(feedbackDiv);
+            feedbackArea.classList.add('feedback-appear');
+
+
+            nextButton.disabled = false; 
         }
 
-        // Actualizar la barra de progreso y el texto
         function updateProgress() {
             const progressPercentage = ((currentQuestionIndex) / quizData.length) * 100;
             progressBarElement.style.width = `${progressPercentage}%`;
             progressTextElement.textContent = `Pregunta ${currentQuestionIndex + 1} de ${quizData.length}`;
         }
         
-        // Función para el botón "Siguiente"
         nextButton.addEventListener('click', () => {
-            if (selectedOption === null) {
-                selectionErrorElement.textContent = 'Por favor, selecciona una opción.';
+            if (!answerSelected) { // Aunque el botón debería estar deshabilitado, una comprobación extra
+                // Idealmente, aquí iría un mensaje en el UI, pero el botón debería estar deshabilitado.
                 return;
             }
 
-            // Comprobar si la respuesta es correcta
-            if (selectedOption === quizData[currentQuestionIndex].correct) {
-                score++;
-            }
-
-            currentQuestionIndex++; // Mover a la siguiente pregunta
+            currentQuestionIndex++; 
 
             if (currentQuestionIndex < quizData.length) {
-                loadQuestion(); // Cargar la siguiente pregunta
+                loadQuestion(); 
             } else {
-                showResults(); // Mostrar resultados si es la última pregunta
+                showResults(); 
             }
         });
 
-        // Mostrar los resultados finales
-        function showResults() {
+        async function showResults() {
+            quizHeader.classList.add('hidden');
             questionArea.classList.add('hidden');
-            document.getElementById('navigation-area').classList.add('hidden');
-            document.getElementById('quiz-header').classList.add('hidden'); // Ocultar cabecera con progreso
+            navigationArea.classList.add('hidden');
             
             resultsArea.classList.remove('hidden');
-            // Aplicar animación de aparición a los resultados
-            resultsArea.classList.remove('question-appear');
-            void resultsArea.offsetWidth; 
-            resultsArea.classList.add('question-appear');
+            resultsArea.classList.remove('results-appear'); // Para reiniciar animación
+            void resultsArea.offsetWidth;
+            resultsArea.classList.add('results-appear');
+
 
             const percentageScore = ((score / quizData.length) * 100).toFixed(1);
-            scoreTextElement.innerHTML = `Obtuviste <span class="font-bold text-green-400">${score} de ${quizData.length}</span> respuestas correctas (${percentageScore}%).`;
+            scoreTextElement.innerHTML = `Apodo: <span class="font-bold text-sky-400">${currentNickname}</span><br>Obtuviste <span class="font-bold text-green-400">${score} de ${quizData.length}</span> respuestas correctas (${percentageScore}%).`;
             
-            // Actualizar barra de progreso al 100% al finalizar
-            progressBarElement.style.width = `100%`;
+            progressBarElement.style.width = `100%`; // Completar barra
             progressTextElement.textContent = `Quiz Completado`;
+
+            // Guardar puntaje en Firebase
+            if (window.saveScore) { // Verificar que la función esté disponible
+                await window.saveScore(currentNickname, score, quizData.length);
+            } else {
+                console.error("La función saveScore no está disponible.");
+            }
+            // Mostrar tabla de líderes
+            if (window.displayLeaderboard) {
+                window.displayLeaderboard();
+            }
         }
 
-        // Reiniciar el quiz
         restartButton.addEventListener('click', () => {
             currentQuestionIndex = 0;
             score = 0;
-            selectedOption = null;
+            answerSelected = false;
             
             resultsArea.classList.add('hidden');
+            quizHeader.classList.remove('hidden');
             questionArea.classList.remove('hidden');
-            document.getElementById('navigation-area').classList.remove('hidden');
-            document.getElementById('quiz-header').classList.remove('hidden'); // Mostrar cabecera
+            navigationArea.classList.remove('hidden');
             nextButton.disabled = true;
 
-            loadQuestion(); // Cargar la primera pregunta
+            loadQuestion(); 
         });
 
-        // Iniciar el quiz al cargar la página
-        loadQuestion();
+        changeNicknameButton.addEventListener('click', () => {
+            currentQuestionIndex = 0;
+            score = 0;
+            answerSelected = false;
+            currentNickname = "";
+            nicknameInput.value = ""; // Limpiar input de nickname
+
+            resultsArea.classList.add('hidden');
+            quizContainer.classList.add('hidden');
+            nicknameScreen.classList.remove('hidden');
+            nicknameScreen.classList.remove('nickname-appear'); // Para reiniciar animación
+            void nicknameScreen.offsetWidth;
+            nicknameScreen.classList.add('nickname-appear');
+
+            // Asegurar que la barra de progreso y texto se reseteen visualmente para la próxima vez
+            progressBarElement.style.width = `0%`;
+            progressTextElement.textContent = `Pregunta 1 de ${quizData.length}`;
+        });
+
+        // Inicialmente, el quiz está oculto hasta que se ingrese el nickname
+        // La función checkAuthAndStart en el script type=module se encarga de la lógica inicial si es necesario.
     </script>
 </body>
 </html>
