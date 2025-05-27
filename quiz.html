@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz: Capítulo 9: La décima parte con talento</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .quiz-option {
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+        .quiz-option:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        .quiz-option.selected {
+            background-color: #4f46e5; /* Indigo-600 */
+            color: white;
+            border-color: #4f46e5; /* Indigo-600 */
+        }
+        .progress-bar-fill {
+            transition: width 0.5s ease-in-out;
+        }
+        /* Animación para la aparición de preguntas */
+        .question-appear {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 to-slate-800 text-slate-100 min-h-screen flex items-center justify-center p-4">
+
+    <div id="quiz-container" class="bg-slate-800 p-6 sm:p-8 rounded-xl shadow-2xl w-full max-w-2xl">
+        <div id="quiz-header" class="mb-6">
+            <h1 class="text-3xl sm:text-4xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500 mb-2">La décima parte con talento</h1>
+            <p id="progress-text" class="text-center text-slate-400 text-sm"></p>
+            <div class="w-full bg-slate-700 rounded-full h-2.5 mt-2">
+                <div id="progress-bar" class="bg-gradient-to-r from-purple-500 to-pink-500 h-2.5 rounded-full progress-bar-fill" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <div id="question-area" class="question-appear">
+            <p id="question-text" class="text-lg sm:text-xl font-semibold mb-6 min-h-[60px]"></p>
+            <div id="options-container" class="space-y-3">
+                </div>
+        </div>
+
+        <div id="results-area" class="hidden text-center question-appear">
+            <h2 class="text-2xl sm:text-3xl font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500">¡Quiz Completado!</h2>
+            <p id="score-text" class="text-xl sm:text-2xl mb-6"></p>
+            <button id="restart-button" class="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:shadow-lg transition duration-300 ease-in-out transform hover:scale-105">
+                Reiniciar Quiz
+            </button>
+        </div>
+
+        <div id="navigation-area" class="mt-8">
+            <button id="next-button" class="w-full bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:shadow-lg transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
+                Siguiente Pregunta
+            </button>
+            <p id="selection-error" class="text-red-400 text-sm text-center mt-2 h-4"></p>
+        </div>
+    </div>
+
+    <script>
+        const quizData = [
+            {
+                question: "¿Cuál es el título del capítulo que describe el periodo de entrenamiento intenso del autor?",
+                options: { a: "El hombre más olvidadizo del mundo", b: "El pequeño rain man que hay en nosotros", c: "El estancamiento satisfactorio", d: "El campeonato de memoria de Estados Unidos" },
+                correct: "c"
+            },
+            {
+                question: "¿Qué recordatorio visual colocó el autor en la pared de su despacho para motivarse durante su entrenamiento?",
+                options: { a: "Una foto de Ben Pridmore.", b: "Las palabras \"No olvides recordar\".", c: "Un mapa de un palacio de la memoria.", d: "Una lista de números aleatorios." },
+                correct: "b"
+            },
+            {
+                question: "Según el texto, ¿cuántos dígitos binarios consecutivos (unos y ceros) convierte Ben Pridmore en una única imagen para memorizar grandes cantidades?",
+                options: { a: "10 dígitos.", b: "30 dígitos.", c: "50 dígitos.", d: "100 dígitos." },
+                correct: "b"
+            },
+            {
+                question: "¿Cuál es el punto débil o \"talón de Aquiles\" de Ben Pridmore en las competiciones de memoria?",
+                options: { a: "Los números aleatorios.", b: "Los listados de palabras.", c: "Los nombres y las caras.", d: "Los poemas inéditos." },
+                correct: "c"
+            },
+            {
+                question: "Según la sugerencia de Anders Ericsson, ¿cómo podía el autor superar un \"estancamiento satisfactorio\" en su entrenamiento de memorización de cartas?",
+                options: { a: "Aumentando las horas de práctica.", b: "Pidiendo ayuda a otro atleta mental.", c: "Ajustando un metrónomo a una velocidad un 10-20% mayor e intentando memorizar a ese ritmo.", d: "Cambiando completamente el sistema de memorización." },
+                correct: "c"
+            },
+            {
+                question: "¿Qué es lo que, más que ninguna otra cosa, diferencia a los memoristas de primera de los de segunda, según el texto?",
+                options: { a: "Su coeficiente intelectual innato.", b: "La calidad de su sistema de palacio de la memoria.", c: "Abordan la memorización como si fuese una ciencia, desarrollando hipótesis y analizando datos.", d: "La cantidad de horas que duermen antes de una competición." },
+                correct: "c"
+            },
+            {
+                question: "¿Cómo documentaba el autor su progreso y dificultades durante el entrenamiento?",
+                options: { a: "Grabando sus sesiones de práctica.", b: "Escribiendo un diario detallado en una libreta.", c: "Utilizando una hoja de cálculo en el portátil para registrar prácticas y dificultades, y anotando mejoras en un diario.", d: "Enviando correos electrónicos regulares a su entrenador." },
+                correct: "c"
+            },
+            {
+                question: "Según el texto, ¿cuál es un requisito previo fundamental para la memorización efectiva?",
+                options: { a: "Tener un alto coeficiente intelectual.", b: "La sinestesia.", c: "La atención.", d: "Beber café." },
+                correct: "c"
+            },
+            {
+                question: "Durante su entrenamiento en casa, el autor compara su esfuerzo con una experiencia que tuvo en un granero reformado. ¿Qué metáfora utiliza Ed Cooke para describir el esfuerzo y la recompensa del entrenamiento?",
+                options: { a: "Es como escalar una montaña, difícil pero gratificante en la cima.", b: "Es como atravesar una red de túneles reptando, que requiere esfuerzo para experimentar gratitud y logro al llegar.", c: "Es como un ritual satánico que requiere beber y memorizar.", d: "Es como una partida de ajedrez que requiere analizar cada movimiento." },
+                correct: "b"
+            },
+            {
+                question: "¿Qué consejo le dio Ed Cooke al autor sobre cómo visualizar imágenes rápidamente, especialmente en situaciones de velocidad como la memorización de cartas?",
+                options: { a: "Intenta ver todos los detalles de la imagen para hacerla más memorable.", b: "Concéntrate solo en un elemento destacado de la imagen, como una sonrisa o un gesto.", c: "Usa solo imágenes abstractas que no requieran detalles visuales.", d: "Asegúrate de que las imágenes sean lo más prosaicas y comunes posible." },
+                correct: "b"
+            },
+            {
+                question: "¿Cuál era el principal objetivo del programa de Raemon Matthews para sus alumnos en el centro Gompers?",
+                options: { a: "Prepararlos para ganar el Campeonato Mundial de Memoria.", b: "Utilizar el arte de la memoria como \"pasaporte\" para sacarlos de un barrio desfavorecido y ayudarlos académicamente.", c: "Enseñarles a convertirse en \"sabios\" con habilidades innatas.", d: "Desarrollar su memoria fotográfica mediante la repetición." },
+                correct: "b"
+            },
+            {
+                question: "¿Por qué creía Raemon Matthews que era importante para sus alumnos memorizar citas textuales en sus trabajos de historia?",
+                options: { a: "Para demostrar que tenían una memoria fotográfica perfecta.", b: "Para que parecieran tener más legitimidad y autoridad.", c: "Porque era una habilidad necesaria para las competiciones de memoria.", d: "Simplemente como un ejercicio mental sin aplicación real." },
+                correct: "b"
+            },
+            {
+                question: "¿Qué incidente durante su infancia llevó a Tony Buzan a cuestionar la definición tradicional de inteligencia y los sistemas educativos?",
+                options: { a: "No poder memorizar una lista de números en clase.", b: "Descubrir que un amigo de una clase considerada para \"zoquetes\" sabía más que él sobre naturaleza, a pesar de que Buzan sacó la nota máxima en el examen.", c: "Fallar en un examen de geografía a pesar de haber estudiado mucho.", d: "Ser incapaz de resolver el cubo de Rubik." },
+                correct: "b"
+            },
+            {
+                question: "¿Qué técnica de memorización crucial aprendió Tony Buzan de su profesor de inglés, y cómo reaccionó al principio el profesor a enseñársela?",
+                options: { a: "El palacio de la memoria; el profesor se la explicó detalladamente la primera vez que se lo pidió.", b: "El sistema mayor; el profesor se negó inicialmente a compartirlo.", c: "La técnica de visualización de imágenes; el profesor se la enseñó a regañadientes.", d: "El chunking o agrupamiento; el profesor se lo mostró sin darle importancia." },
+                correct: "b"
+            },
+            {
+                question: "¿Cómo utilizaba Tony Buzan las técnicas de memoria en las clases en las que sustituía para motivar a los alumnos que se consideraban \"tontos\"?",
+                options: { a: "Les hacía realizar pruebas de lógica para demostrar su inteligencia innata.", b: "Les daba una prueba de memoria inicial en la que fallaban, luego les enseñaba una técnica, y al volver a hacer la prueba obtenían la máxima puntuación, haciéndoles cuestionar su percepción de sí mismos.", c: "Les contaba historias inspiradoras de otros memoristas.", d: "Simplemente les decía que eran inteligentes, sin darles herramientas concretas." },
+                correct: "b"
+            }
+        ];
+
+        // Elementos del DOM
+        const quizContainer = document.getElementById('quiz-container');
+        const questionArea = document.getElementById('question-area');
+        const questionTextElement = document.getElementById('question-text');
+        const optionsContainer = document.getElementById('options-container');
+        const nextButton = document.getElementById('next-button');
+        const resultsArea = document.getElementById('results-area');
+        const scoreTextElement = document.getElementById('score-text');
+        const restartButton = document.getElementById('restart-button');
+        const progressTextElement = document.getElementById('progress-text');
+        const progressBarElement = document.getElementById('progress-bar');
+        const selectionErrorElement = document.getElementById('selection-error');
+
+        // Estado del Quiz
+        let currentQuestionIndex = 0;
+        let score = 0;
+        let selectedOption = null; // Para rastrear la opción seleccionada
+
+        // Función para cargar la pregunta actual
+        function loadQuestion() {
+            // Limpiar selección anterior y error
+            selectedOption = null;
+            selectionErrorElement.textContent = '';
+            nextButton.disabled = true; // Deshabilitar hasta que se seleccione una opción
+
+            // Aplicar animación de aparición
+            questionArea.classList.remove('question-appear');
+            void questionArea.offsetWidth; // Truco para reiniciar la animación CSS
+            questionArea.classList.add('question-appear');
+            
+            const currentQuestion = quizData[currentQuestionIndex];
+            questionTextElement.textContent = currentQuestion.question;
+            optionsContainer.innerHTML = ''; // Limpiar opciones anteriores
+
+            // Crear y añadir botones de opción
+            ['a', 'b', 'c', 'd'].forEach(key => {
+                if (currentQuestion.options[key]) {
+                    const optionButton = document.createElement('button');
+                    optionButton.className = 'quiz-option w-full text-left p-3 sm:p-4 border-2 border-slate-700 rounded-lg hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500';
+                    optionButton.innerHTML = `<span class="font-bold mr-2">${key.toUpperCase()})</span> ${currentQuestion.options[key]}`;
+                    optionButton.dataset.key = key; // Guardar la clave de la opción
+                    optionButton.addEventListener('click', () => handleOptionSelect(optionButton, key));
+                    optionsContainer.appendChild(optionButton);
+                }
+            });
+
+            updateProgress(); // Actualizar progreso
+            // Actualizar texto del botón "Siguiente"
+            if (currentQuestionIndex === quizData.length - 1) {
+                nextButton.textContent = 'Finalizar Quiz';
+            } else {
+                nextButton.textContent = 'Siguiente Pregunta';
+            }
+        }
+
+        // Manejar la selección de una opción
+        function handleOptionSelect(buttonElement, key) {
+            // Quitar la clase 'selected' de cualquier otra opción
+            const allOptions = optionsContainer.querySelectorAll('.quiz-option');
+            allOptions.forEach(opt => opt.classList.remove('selected'));
+
+            // Añadir 'selected' a la opción clickeada
+            buttonElement.classList.add('selected');
+            selectedOption = key;
+            nextButton.disabled = false; // Habilitar el botón "Siguiente"
+            selectionErrorElement.textContent = ''; // Limpiar mensaje de error si lo hubiera
+        }
+
+        // Actualizar la barra de progreso y el texto
+        function updateProgress() {
+            const progressPercentage = ((currentQuestionIndex) / quizData.length) * 100;
+            progressBarElement.style.width = `${progressPercentage}%`;
+            progressTextElement.textContent = `Pregunta ${currentQuestionIndex + 1} de ${quizData.length}`;
+        }
+        
+        // Función para el botón "Siguiente"
+        nextButton.addEventListener('click', () => {
+            if (selectedOption === null) {
+                selectionErrorElement.textContent = 'Por favor, selecciona una opción.';
+                return;
+            }
+
+            // Comprobar si la respuesta es correcta
+            if (selectedOption === quizData[currentQuestionIndex].correct) {
+                score++;
+            }
+
+            currentQuestionIndex++; // Mover a la siguiente pregunta
+
+            if (currentQuestionIndex < quizData.length) {
+                loadQuestion(); // Cargar la siguiente pregunta
+            } else {
+                showResults(); // Mostrar resultados si es la última pregunta
+            }
+        });
+
+        // Mostrar los resultados finales
+        function showResults() {
+            questionArea.classList.add('hidden');
+            document.getElementById('navigation-area').classList.add('hidden');
+            document.getElementById('quiz-header').classList.add('hidden'); // Ocultar cabecera con progreso
+            
+            resultsArea.classList.remove('hidden');
+            // Aplicar animación de aparición a los resultados
+            resultsArea.classList.remove('question-appear');
+            void resultsArea.offsetWidth; 
+            resultsArea.classList.add('question-appear');
+
+            const percentageScore = ((score / quizData.length) * 100).toFixed(1);
+            scoreTextElement.innerHTML = `Obtuviste <span class="font-bold text-green-400">${score} de ${quizData.length}</span> respuestas correctas (${percentageScore}%).`;
+            
+            // Actualizar barra de progreso al 100% al finalizar
+            progressBarElement.style.width = `100%`;
+            progressTextElement.textContent = `Quiz Completado`;
+        }
+
+        // Reiniciar el quiz
+        restartButton.addEventListener('click', () => {
+            currentQuestionIndex = 0;
+            score = 0;
+            selectedOption = null;
+            
+            resultsArea.classList.add('hidden');
+            questionArea.classList.remove('hidden');
+            document.getElementById('navigation-area').classList.remove('hidden');
+            document.getElementById('quiz-header').classList.remove('hidden'); // Mostrar cabecera
+            nextButton.disabled = true;
+
+            loadQuestion(); // Cargar la primera pregunta
+        });
+
+        // Iniciar el quiz al cargar la página
+        loadQuestion();
+    </script>
+</body>
+</html>
